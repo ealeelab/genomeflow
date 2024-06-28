@@ -1,0 +1,164 @@
+FROM ubuntu:18.04
+MAINTAINER junseok.park@childrens.harvard.edu
+
+##### Base Tools #####
+RUN apt-get update && apt-get install -y git \
+    curl \
+    wget apt-utils sudo \
+    build-essential libcurl4-gnutls-dev libxml2-dev libssl-dev \
+    zlib1g-dev vim \
+    libncurses-dev unzip
+
+RUN apt-get update -y && apt-get install -y libbz2-dev liblzma-dev cmake libxml2-dev libcurl4-openssl-dev \
+    libboost-dev gawk libssl-dev pigz \
+    htop \
+    iputils-ping libfontconfig1-dev libcairo2-dev \
+    software-properties-common \
+    parallel
+
+RUN apt-add-repository 'deb http://security.debian.org/debian-security stretch/updates main' && \
+    apt-get update -y && apt-get install -y openjdk-8-jdk
+
+## Python 3.6
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+  && bash Miniconda3-latest-Linux-x86_64.sh -b -p /miniconda \
+  && PATH=$PATH:/miniconda/pcondabin:/miniconda/bin
+
+## Install for GCP SDK
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" \
+ | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+ | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && apt-get update -y \
+  && apt-get install google-cloud-sdk -y && apt-get -y autoremove && apt-get -y clean
+
+
+##### gsc-fuse #####
+ENV GCSFUSE_REPO=gcsfuse-`lsb_release -c -s`
+RUN echo "deb http://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+RUN apt-get update -y && apt-get install gcsfuse
+
+#### Custom Tools
+
+## Section #1 - Multi Core
+## bam_to_fastq
+RUN wget https://github.com/broadinstitute/picard/releases/download/1.138/picard-tools-1.138.zip \
+  && unzip picard-tools-1.138.zip \
+  && mv picard-tools-1.138 /tools \
+  && rm -rf picard-tools-1.138.zip \
+  && ln -s /tools/picard-tools-1.138 /tools/picard-1.138
+ENV PICARD="/tools/picard-1.138/picard.jar"
+COPY run_picard.sh
+
+ENV PATH=/tools:$PATH
+## STAR_two_pass_new \
+RUN wget https://github.com/alexdobin/STAR/archive/2.5.4a.tar.gz \
+    && tar -xzf 2.5.4a.tar.gz \
+    && cd STAR-2.5.4a/source \
+    && make STAR \
+    && cd .. \
+    && cd .. \
+    && mv STAR-2.5.4a /tools \
+    && ln -s /tools/STAR-2.5.4a/source/STAR /tools/STAR \
+    && rm -rf 2.5.4a.tar.gz
+
+## read_filter_pre and read_filter_post\
+RUN wget -O samtools-0.1.19.tar.bz2 https://sourceforge.net/projects/samtools/files/samtools/0.1.19/samtools-0.1.19.tar.bz2/download \
+    && tar -xjf samtools-0.1.19.tar.bz2 \
+    && cd samtools-0.1.19 \
+    && make \
+    && cd .. \
+    && mv samtools-0.1.19 /tools/samtools-0.1.19  \
+    && ln -s /tools/samtools-0.1.19/samtools /tools/samtools \
+    && cd /root/downloads \
+    && rm -r samtools-0.1.19.tar.bz2 samtools-0.1.19
+ENV PATH=/tools/samtools:$PATH
+
+## read_process and local_realignment, extract_control_vcf
+## GATK 3.6
+RUN wget https://github.com/lh3/bwa/releases/download/v0.7.15/bwa-0.7.15.tar.bz2 \
+    && tar -xjf /root/downloads/bwa-0.7.15.tar.bz2 \
+    && cd bwa-0.7.15 \
+    && make -j $(nproc) \
+    && cd /root/downloads \
+    && mv bwa-0.7.15 /tools \
+    && rm bwa-0.7.15.tar.bz2
+ENV PATH=/tools/bwa-0.7.15:$PATH
+
+RUN wget https://storage.googleapis.com/gatk-software/package-archive/gatk/GenomeAnalysisTK-3.6-0-g89b7209.tar.bz2 \
+    && mkdir gatk-3.6 \
+    && mv GenomeAnalysisTK-3.6-0-g89b7209.tar.bz2 ./gatk-3.6 \
+    && cd gatk-3.6 \
+    && tar -xjf GenomeAnalysisTK-3.6-0-g89b7209.tar.bz2 \
+    && rm -rf GenomeAnalysisTK-3.6-0-g89b7209.tar.bz2 \
+    && cd .. \
+    && mv /root/downloads/gatk-3.6 /tools
+
+## read_summary
+## coverageBed
+RUN wget https://github.com/arq5x/bedtools2/releases/download/v2.30.0/bedtools-2.30.0.tar.gz \
+    && tar -xvf bedtools-2.30.0.tar.gz \
+    && cd bedtools2 \
+    && make -j $(nproc) \
+    && cd .. \
+    && mv bedtools2 /tools \
+    && rm -rf /root/downloads/bedtools-2.30.0.tar.gz
+ENV PATH=/tools/bedtools2/bin:$PATH
+
+RUN wget https://github.com/samtools/htslib/releases/download/1.2.1/htslib-1.2.1.tar.bz2 \
+    && tar -xvf htslib-1.2.1.tar.bz2 \
+    && cd htslib-1.2.1 \
+    && ./configure \
+    && make -j $(nproc) \
+    && make install
+
+## MosiacHunter
+## Parallel?? -> Change to for loop
+## Copy only mosichunter.jar
+## Install JDK is enough
+## Install bait, install other neccesary tools
+
+copy MosaicHunter.tar.gz \
+copy blat.tar.gz # 36x2 \
+  gsutil cp gs://tempfileforals/blat.tar.gz
+
+## run_ANNOVAR
+## Install annovar
+copy gs://tempfileforals/annovar-20150322.tar.gz \
+ENV PATH=/tools/annovar-20150322:$PATH
+## myjoin install
+
+## my_join.pl
+gs://tempfileforals/my_join.pl
+
+## copy_my_join
+
+
+
+
+## Custom Scripts
+##### Install GCP Packages
+ENV CLOUD_SDK_VERSION=$CLOUD_SDK_VERSION
+ENV GCP_ACCOUNT=$GCP_ACCOUNT
+ENV GCP_KEY_FILE=$GCP_KEY_FILE
+ENV GCP_BUCKET_NAME=$GCP_BUCKET_NAME
+ENV GCP_BUCKET_MOUNT_DIR=$GCP_BUCKET_MOUNT_DIR
+
+##### Injection GCP authentification file
+gcloud auth activate-service-account ${GCP_ACCOUNT} --key-file=${GCP_KEY_FILE}
+
+##### Link Google Bucket as mounted disk
+gcsfuse ${SOURCE_BUCKET_NAME} ${SOURCE_BUCKET_MOUNT_DIR}
+gcsfuse ${REF_BUCKET_NAME} ${REF_BUCKET_MOUNT_DIR}
+gcsfuse ${RESULT_BUCKET_NAME} ${RESULT_BUCKET_MOUNT_DIR}
+
+## Install Java
+apt-get install openjdk-8-jdk
+
+ARG GCP_ACCOUNT=junseokpark.kr@gmail.com
+ARG GCP_KEY_FILE=
+ARG SAMPLE_BUCKET_NAME=samples_s1d5x1_genomeflow
+ARG SAMPLE_BUCKET_MOUNT_DIR=/mnt/samples
+ARG REF_BUCKET_NAME=reference_s1d5x1_genomeflow
+ARG REF_BUCKET_MOUNT_DIR=/mnt/reference
+ARG RESULT_BUCKET_NAME=results_s1d5x1_genomeflow
+ARG RESULT_BUCKET_MOUNT_DIR=/mnt/results

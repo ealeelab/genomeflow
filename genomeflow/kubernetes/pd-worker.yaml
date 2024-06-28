@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-ad-worker
+spec:
+  storageClassName:
+  capacity:
+    storage: 30G
+  accessModes:
+    - ReadOnlyMany
+  claimRef:
+    namespace: default
+    name: pv-claim-ad-worker
+  gcePersistentDisk:
+    pdName: pv-ad-worker
+    fsType: ext4
+    readOnly: true

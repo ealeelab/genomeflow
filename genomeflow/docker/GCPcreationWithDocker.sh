@@ -1,0 +1,13 @@
+gcloud compute instances create-with-container te-container-test \
+    --container-image gcr.io/aleelab-genomeflow/python:3.7.12-slim-bullseye \
+    --container-privileged \
+    --boot-disk-size=60GB \
+    --boot-disk-type=pd-ssd \
+    --custom-cpu=8 \
+    --custom-memory=64GB \
+    --custom-vm-type=e2 \
+    --zone=us-east4-b \
+    --disk name=test-disk \
+    --network=aleelab-genomeflow-vpc \
+    --subnet=tier-primary \
+    --container-mount-disk mount-path=/data,name=test-disk

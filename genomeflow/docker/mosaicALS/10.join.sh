@@ -1,0 +1,1 @@
+my_join.pl -F1,2 -f1,2 -a rnaseq/MosaicHunter/${PROJECT_NAME}/final.annovar_filtered.tsv -b genome/HaplotypeCaller/${PROJECT_NAME}.control.SNP.vcf | grep -v "PASS" > rnaseq/MosaicHunter/${PROJECT_NAME}/final.wgs_filtered.tsv

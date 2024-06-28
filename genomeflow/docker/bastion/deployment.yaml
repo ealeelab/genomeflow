@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ad-transposon-bastion
+  generation: 1
+  labels:
+    app: ad-transposon-bastion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ad-transposon-bastion
+  template:
+    metadata:
+      labels:
+        app: ad-transposon-bastion
+    spec:
+#      volumes:
+#        - name: pv-storage-worker
+#          persistentVolumeClaim:
+#            claimName: pv-claim-ad-worker
+#            readOnly: true
+        #- name: pv-nfs
+        #  persistentVolumeClaim:
+        #    claimName: fileserver-claim
+        #    readOnly: false
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: c-ad-transposon-bastion
+          image: gcr.io/aleelab-genomeflow/ad-transposon-bastion:0.1
+          command: ["/bin/bash"]
+          stdin: true
+          tty: true
+#          volumeMounts:
+#            - mountPath: /worker
+#              name: pv-storage-worker
+#              readOnly: true
+            #- mountPath: /nfs-data
+            #  name: pv-nfs
+          env:
+            - name: BROKER_URL
+              value: amqp://guest:guest@rabbitmq-service:5672
+      nodeSelector:
+        cloud.google.com/gke-nodepool: default-pool

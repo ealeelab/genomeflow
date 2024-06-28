@@ -1,0 +1,93 @@
+FROM python:3.7.12-slim-bullseye
+MAINTAINER junseok.park@childrens.harvard.edu
+
+## Install synapseClient
+RUN pip install synapseclient
+
+RUN apt-get update && apt-get install -y git \
+    htop \
+    curl \
+    wget apt-utils sudo \
+    build-essential libcurl4-gnutls-dev libxml2-dev libssl-dev \
+    zlib1g-dev vim \
+    libncurses-dev \
+    libz-dev
+
+RUN apt-get update -y && apt-get install -y libbz2-dev liblzma-dev cmake libxml2-dev libcurl4-openssl-dev \
+    libboost-dev gawk libssl-dev pigz \
+    iputils-ping libfontconfig1-dev libcairo2-dev
+
+## Reference file
+RUN wget http://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_38/gencode.v38.primary_assembly.annotation.gtf.gz ./
+
+## TELocal
+## https://github.com/mhammell-laboratory/TElocal
+
+# Make directory
+RUN git clone https://github.com/mhammell-laboratory/TElocal.git
+RUN python setup.py install
+
+
+## TETranscript
+## https://github.com/mhammell-laboratory/TEtranscripts
+RUN git clone https://github.com/mhammell-laboratory/TEtranscripts.git
+RUN python setup.py install
+
+## Star command
+#https://github.com/alexdobin/STAR
+
+RUN wget https://github.com/alexdobin/STAR/archive/2.7.9a.tar.gz && \
+    tar -xzf 2.7.9a.tar.gz && \
+    cd STAR-2.7.9a && \
+    cd STAR/source && \
+    make STAR
+
+ENV GCSFUSE_REPO=gcsfuse-jessie
+RUN echo "deb http://packages.cloud.google.com/apt $GCSFUSE_REPO main" | tee /etc/apt/sources.list.d/gcsfuse.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+RUN apt-get update &&  apt-get install -y gcsfuse
+RUN mkdir ${HOME_DIR}
+ENV HOME_DIR=${HOME_DIR}
+
+
+## Temp Install for GC cloud
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" \
+ | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+ | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && apt-get update -y \
+  && apt-get install google-cloud-sdk -y && apt-get -y autoremove && apt-get -y clean
+
+RUN ln -s /root/TElocal/STAR-2.7.9a/source/STAR /usr/local/bin/STAR
+
+# L1EM (Python 2.7.15) different container
+#https://github.com/FenyoLab/L1EM
+RUN git clone https://github.com/FenyoLab/L1EM.git
+RUN cd L1EM
+RUN conda env create -f L1EM.yml
+RUN source activate L1EM
+
+## Index
+# wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
+# zcat hg38.fa.gz > hg38.fa
+# bwa index hg38.fa
+
+### Commands for TELocal and TETranscript
+
+## Start Alignment
+
+# hisat2
+RUN apt-get install -y zip unzip
+
+RUN wget -P /root/downloads --content-disposition https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download \
+    && mv hisat2-2.2.1-Linux_x86_64.zip /usr/local/ \
+    && unzip /usr/local/hisat2-2.2.1-Linux_x86_64.zip \
+    && rm /usr/local/hisat2-2.2.1-Linux_x86_64.zip
+ENV PATH=/usr/local/hisat2-2.2.1:$PATH
+
+RUN STAR --runThreadN 8 --genomeDir /path/to/genome \
+    --winAnchorMultimapNmax 100 --outFilterMultimapNmax 100 \
+    --outSAMtype BAM SortedByCoordinate --outFileNamePrefix \
+    /path/to/output/dir/prefix --readFilesIn /path/to/read1.fastq /path/to/read2.fastq
+
+
+RUN TElocal --stranded reverse --sortByPos --mode multi -b ../path/to/bamfile --project sample_name --GTF /path/to/gencode.v38.primary_assembly.annotation.gtf --TE /path/to/GRCh38_GENCODE_rmsk_TE.gtf.locInd
+
