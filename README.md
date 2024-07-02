@@ -8,7 +8,7 @@ a tool for automated development of computing architecture and resource optimiza
 
 ### Installtaion
 ```python
-pip install genomeflow 
+git clone [GenomeFlow Repository] 
 ```
 
 ### Usages
